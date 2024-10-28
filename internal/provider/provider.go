@@ -1,7 +1,12 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -38,50 +43,99 @@ func (p *coveoProvider) Metadata(_ context.Context, _ provider.MetadataRequest, 
 // Schema defines the provider-level schema for configuration data.
 func (p *coveoProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
     resp.Schema = schema.Schema{
-		Attributes: map[string]schema.Attribute{
-			"api_key": schema.StringAttribute{
-				Required: true,
-				Description: "The API key to authenticate with the Coveo API.",
-			},
-		},
-	}
+        Attributes: map[string]schema.Attribute{
+            "api_key": schema.StringAttribute{
+                Required:    true,
+                Description: "The API key for authenticating with the Coveo API.",
+            },
+            "organization_id": schema.StringAttribute{
+                Required:    true,
+                Description: "The Coveo organization ID.",
+            },
+        },
+    }
 }
 
+// CoveoClient is a simple client to interact with the Coveo API.
 type CoveoClient struct {
-	ApiKey string
-	HttpClient *http.Client
+    ApiKey         string
+    OrganizationID string
+    HttpClient     *http.Client
 }
 
-func NewCoveoClient(apiKey string) *CoveoClient {
-	return &CoveoClient{
-		ApiKey: apiKey,
-		HttpClient: &http.Client{},
-	}
+// NewCoveoClient creates a new Coveo API client.
+func NewCoveoClient(apiKey, organizationID string) *CoveoClient {
+    return &CoveoClient{
+        ApiKey:         apiKey,
+        OrganizationID: organizationID,
+        HttpClient:     &http.Client{},
+    }
 }
 
-// Configure prepares a coveo API client for data sources and resources.
+// DoRequest is a helper to make API requests and parse the response.
+func (c *CoveoClient) DoRequest(method, endpoint string, body interface{}) ([]byte, error) {
+    // Include the organization ID in the base URL
+    baseUrl := fmt.Sprintf("https://platform.cloud.coveo.com/rest/organizations/%s", c.OrganizationID)
+    url := fmt.Sprintf("%s/%s", baseUrl, endpoint)
+
+    var reqBody []byte
+    var err error
+    if body != nil {
+        reqBody, err = json.Marshal(body)
+        if err != nil {
+            return nil, err
+        }
+    }
+    req, err := http.NewRequest(method, url, bytes.NewBuffer(reqBody))
+    if err != nil {
+        return nil, err
+    }
+    req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.ApiKey))
+    req.Header.Set("Content-Type", "application/json")
+
+    resp, err := c.HttpClient.Do(req)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode >= 400 {
+        return nil, fmt.Errorf("API request error: %s", resp.Status)
+    }
+    return ioutil.ReadAll(resp.Body)
+}
+
+// Configure prepares a Coveo API client for data sources and resources.
 func (p *coveoProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-	var config struct {
-		ApiKey string `tfsdk:"api_key"`
-	}
-	diags := req.Config.Get(ctx, &config)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
+    // Retrieve provider configuration values.
+    var config struct {
+        ApiKey         string `tfsdk:"api_key"`
+        OrganizationID string `tfsdk:"organization_id"`
+    }
 
-	if config.ApiKey == "" {
-		resp.Diagnostics.AddError(
-			"Missing API Key",
-			"An API key must be provided to authenticate with the Coveo API.",
-		)
-		return
-	}
 
-	client := NewCoveoClient(config.ApiKey)
+    diags := req.Config.Get(ctx, &config)
+    resp.Diagnostics.Append(diags...)
+    if resp.Diagnostics.HasError() {
+        return
+    }
+    log.Printf("Received api_key: %s", config.ApiKey)
+    log.Printf("Received organization_id: %s", config.OrganizationID)
+    // Validate configuration.
+    if config.ApiKey == "" || config.OrganizationID == "" {
+        resp.Diagnostics.AddError(
+            "Missing Configuration",
+            "Both the API key and organization ID are required to authenticate with the Coveo API.",
+        )
+        return
+    }
 
-	resp.DataSourceData = client
-	resp.ResourceData = client
+    // Create the Coveo client.
+    client := NewCoveoClient(config.ApiKey, config.OrganizationID)
+
+    // Make the client available for data sources and resources.
+    resp.DataSourceData = client
+    resp.ResourceData = client
 }
 
 // DataSources defines the data sources implemented in the provider.
@@ -91,7 +145,7 @@ func (p *coveoProvider) DataSources(_ context.Context) []func() datasource.DataS
 
 // Resources defines the resources implemented in the provider.
 func (p *coveoProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{
-		NewCoveoIndexResource,
-	}
+    return []func() resource.Resource{
+        NewCoveoIndexResource, // Implement this function in resource_coveo_index.go
+    }
 }
