@@ -35,9 +35,9 @@ func (r *CoveoIndexResource) Schema(ctx context.Context, req resource.SchemaRequ
 }
 
 func (r *CoveoIndexResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-    // Extract the name attribute from the Terraform configuration.
+    // Extract the attributes from the Terraform configuration.
     var plan struct {
-        Name string `tfsdk:"name"`
+        Name        string `tfsdk:"name"`
     }
     diags := req.Plan.Get(ctx, &plan)
     resp.Diagnostics.Append(diags...)
@@ -47,7 +47,7 @@ func (r *CoveoIndexResource) Create(ctx context.Context, req resource.CreateRequ
 
     // Define the request body for the API to create the index.
     requestBody := map[string]interface{}{
-        "name": plan.Name,
+        "name":        plan.Name,
     }
 
     // Construct the URL for the Coveo index creation API.

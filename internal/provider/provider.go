@@ -63,7 +63,6 @@ type CoveoClient struct {
     HttpClient     *http.Client
 }
 
-// NewCoveoClient creates a new Coveo API client.
 func NewCoveoClient(apiKey, organizationID string) *CoveoClient {
     return &CoveoClient{
         ApiKey:         apiKey,
@@ -71,7 +70,6 @@ func NewCoveoClient(apiKey, organizationID string) *CoveoClient {
         HttpClient:     &http.Client{},
     }
 }
-
 // DoRequest is a helper to make API requests and parse the response.
 func (c *CoveoClient) DoRequest(method, endpoint string, body interface{}) ([]byte, error) {
     // Include the organization ID in the base URL
@@ -143,9 +141,9 @@ func (p *coveoProvider) DataSources(_ context.Context) []func() datasource.DataS
     return nil
 }
 
-// Resources defines the resources implemented in the provider.
 func (p *coveoProvider) Resources(_ context.Context) []func() resource.Resource {
     return []func() resource.Resource{
-        NewCoveoIndexResource, // Implement this function in resource_coveo_index.go
+        NewCoveoIndexResource,
+        NewCoveoDocumentResource, // Ensure this is properly registered
     }
 }
