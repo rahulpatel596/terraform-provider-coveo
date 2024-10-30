@@ -14,8 +14,8 @@ type CoveoDocumentResource struct {
     client *CoveoClient
 }
 
-func NewCoveoDocumentResource() resource.Resource {
-    return &CoveoDocumentResource{}
+func NewCoveoDocumentResource(client *CoveoClient) resource.Resource {
+    return &CoveoDocumentResource{client: client}
 }
 
 // Metadata sets the resource type name.
@@ -43,6 +43,10 @@ func (r *CoveoDocumentResource) Schema(ctx context.Context, req resource.SchemaR
                 Required:    true,
                 Description: "The source ID where the document will be stored.",
             },
+            "document_id": schema.StringAttribute{
+                Optional:    true,
+                Description: "The source ID where the document will be stored.",
+            },
         },
     }
 }
@@ -60,6 +64,7 @@ func (r *CoveoDocumentResource) Create(ctx context.Context, req resource.CreateR
         Title    string `tfsdk:"title"`
         Content  string `tfsdk:"content"`
         SourceID string `tfsdk:"source_id"`
+        DocumentID string `tfsdk:"document_id"`
     }
     diags := req.Plan.Get(ctx, &plan)
     resp.Diagnostics.Append(diags...)
@@ -74,10 +79,10 @@ func (r *CoveoDocumentResource) Create(ctx context.Context, req resource.CreateR
     }
 
     // Define the endpoint for document creation in the specified source
-    endpoint := fmt.Sprintf("sources/%s/documents", plan.SourceID)
+    endpoint := fmt.Sprintf("sources/%s/documents?documentId=%s", plan.SourceID, plan.DocumentID)
     
     // Make API request
-    body, err := r.client.DoRequest("POST", endpoint, requestBody)
+    body, err := r.client.DoRequest("PUT", endpoint, requestBody)
     if err != nil {
         resp.Diagnostics.AddError("API Error", fmt.Sprintf("Failed to create document: %s", err))
         return
@@ -92,16 +97,22 @@ func (r *CoveoDocumentResource) Create(ctx context.Context, req resource.CreateR
     }
 
     // Extract and set document ID
-    documentID, ok := responseBody["id"].(string)
-    if !ok || documentID == "" {
-        resp.Diagnostics.AddError("Invalid Response", "Coveo API response did not include a valid document ID.")
-        return
-    }
-    diags = resp.State.SetAttribute(ctx, path.Root("id"), documentID)
-    resp.Diagnostics.Append(diags...)
+    // documentID, ok := responseBody["id"].(string)
+    // if !ok || documentID == "" {
+    //     resp.Diagnostics.AddError("Invalid Response", "Coveo API response did not include a valid document ID.")
+    //     return
+    // }
+    // diags = resp.State.SetAttribute(ctx, path.Root("id"), documentID)
+    // resp.Diagnostics.Append(diags...)
 
     // Optionally, set other response attributes if they are part of the API response
+    // diags = resp.State.SetAttribute(ctx, path.Root("title"), plan.Title)
+    // resp.Diagnostics.Append(diags...)
+
     diags = resp.State.SetAttribute(ctx, path.Root("title"), plan.Title)
+    diags = resp.State.SetAttribute(ctx, path.Root("source_id"), plan.SourceID)
+    diags = resp.State.SetAttribute(ctx, path.Root("document_id"), plan.DocumentID)
+    diags = resp.State.SetAttribute(ctx, path.Root("content"), plan.Content)
     resp.Diagnostics.Append(diags...)
 }
 
@@ -109,8 +120,10 @@ func (r *CoveoDocumentResource) Create(ctx context.Context, req resource.CreateR
 // Read retrieves the document’s data.
 func (r *CoveoDocumentResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
     var state struct {
-        ID       string `tfsdk:"id"`
         SourceID string `tfsdk:"source_id"`
+        Title string `tfsdk:"title"`
+        DocumentID string `tfsdk:"document_id"`
+        Content string `tfsdk:"content"`
     }
     diags := req.State.Get(ctx, &state)
     resp.Diagnostics.Append(diags...)
@@ -118,7 +131,7 @@ func (r *CoveoDocumentResource) Read(ctx context.Context, req resource.ReadReque
         return
     }
 
-    endpoint := fmt.Sprintf("sources/%s/documents/%s", state.SourceID, state.ID)
+    endpoint := fmt.Sprintf("sources/%s/documents/%s", state.SourceID, state.DocumentID)
     body, err := r.client.DoRequest("GET", endpoint, nil)
     if err != nil {
         resp.Diagnostics.AddError("API Error", fmt.Sprintf("Failed to read document: %s", err))
@@ -139,7 +152,7 @@ func (r *CoveoDocumentResource) Read(ctx context.Context, req resource.ReadReque
 // Update modifies an existing document.
 func (r *CoveoDocumentResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
     var plan struct {
-        ID       string `tfsdk:"id"`
+        DocumentID       string `tfsdk:"document_id"`
         Title    string `tfsdk:"title"`
         Content  string `tfsdk:"content"`
         SourceID string `tfsdk:"source_id"`
@@ -155,7 +168,7 @@ func (r *CoveoDocumentResource) Update(ctx context.Context, req resource.UpdateR
         "content": plan.Content,
     }
 
-    endpoint := fmt.Sprintf("sources/%s/documents/%s", plan.SourceID, plan.ID)
+    endpoint := fmt.Sprintf("sources/%s/documents/%s", plan.SourceID, plan.DocumentID)
     _, err := r.client.DoRequest("PUT", endpoint, requestBody)
     if err != nil {
         resp.Diagnostics.AddError("API Error", fmt.Sprintf("Failed to update document: %s", err))
@@ -166,7 +179,7 @@ func (r *CoveoDocumentResource) Update(ctx context.Context, req resource.UpdateR
 // Delete removes a document.
 func (r *CoveoDocumentResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
     var state struct {
-        ID       string `tfsdk:"id"`
+        DocumentID       string `tfsdk:"document_id"`
         SourceID string `tfsdk:"source_id"`
     }
     diags := req.State.Get(ctx, &state)
@@ -175,7 +188,7 @@ func (r *CoveoDocumentResource) Delete(ctx context.Context, req resource.DeleteR
         return
     }
 
-    endpoint := fmt.Sprintf("sources/%s/documents/%s", state.SourceID, state.ID)
+    endpoint := fmt.Sprintf("sources/%s/documents/%s", state.SourceID, state.DocumentID)
     _, err := r.client.DoRequest("DELETE", endpoint, nil)
     if err != nil {
         resp.Diagnostics.AddError("API Error", fmt.Sprintf("Failed to delete document: %s", err))

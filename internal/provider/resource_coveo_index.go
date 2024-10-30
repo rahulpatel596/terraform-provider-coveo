@@ -10,8 +10,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 )
 
-func NewCoveoIndexResource() resource.Resource {
-    return &CoveoIndexResource{}
+func NewCoveoIndexResource(client *CoveoClient) resource.Resource {
+    return &CoveoIndexResource{client: client}
 }
 
 type CoveoIndexResource struct {
@@ -36,7 +36,11 @@ func (r *CoveoIndexResource) Schema(ctx context.Context, req resource.SchemaRequ
 
 func (r *CoveoIndexResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
     // Extract the attributes from the Terraform configuration.
-    var plan struct {
+    if r.client == nil {
+        resp.Diagnostics.AddError("Client Error", "The Coveo client was not properly initialized.")
+        return
+    }
+	var plan struct {
         Name        string `tfsdk:"name"`
     }
     diags := req.Plan.Get(ctx, &plan)

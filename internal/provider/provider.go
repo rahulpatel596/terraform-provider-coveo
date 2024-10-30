@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -32,6 +31,7 @@ func New(version string) func() provider.Provider {
 // coveoProvider is the provider implementation.
 type coveoProvider struct {
     version string
+    client *CoveoClient
 }
 
 // Metadata returns the provider type name.
@@ -73,7 +73,7 @@ func NewCoveoClient(apiKey, organizationID string) *CoveoClient {
 // DoRequest is a helper to make API requests and parse the response.
 func (c *CoveoClient) DoRequest(method, endpoint string, body interface{}) ([]byte, error) {
     // Include the organization ID in the base URL
-    baseUrl := fmt.Sprintf("https://platform.cloud.coveo.com/rest/organizations/%s", c.OrganizationID)
+    baseUrl := fmt.Sprintf("https://api.cloud.coveo.com/push/v1/organizations/%s", c.OrganizationID)
     url := fmt.Sprintf("%s/%s", baseUrl, endpoint)
 
     var reqBody []byte
@@ -117,9 +117,7 @@ func (p *coveoProvider) Configure(ctx context.Context, req provider.ConfigureReq
     if resp.Diagnostics.HasError() {
         return
     }
-    log.Printf("Received api_key: %s", config.ApiKey)
-    log.Printf("Received organization_id: %s", config.OrganizationID)
-    // Validate configuration.
+
     if config.ApiKey == "" || config.OrganizationID == "" {
         resp.Diagnostics.AddError(
             "Missing Configuration",
@@ -128,12 +126,15 @@ func (p *coveoProvider) Configure(ctx context.Context, req provider.ConfigureReq
         return
     }
 
-    // Create the Coveo client.
-    client := NewCoveoClient(config.ApiKey, config.OrganizationID)
-
-    // Make the client available for data sources and resources.
-    resp.DataSourceData = client
-    resp.ResourceData = client
+    // Initialize client
+    // client := NewCoveoClient(config.ApiKey, config.OrganizationID)
+    // if client == nil {
+    //     resp.Diagnostics.AddError("Client Initialization Error", "Failed to initialize Coveo client.")
+    //     return
+    // }
+    p.client =  NewCoveoClient(config.ApiKey, config.OrganizationID)
+    // Pass the client to resources
+    // resp.ResourceData = client
 }
 
 // DataSources defines the data sources implemented in the provider.
@@ -143,7 +144,7 @@ func (p *coveoProvider) DataSources(_ context.Context) []func() datasource.DataS
 
 func (p *coveoProvider) Resources(_ context.Context) []func() resource.Resource {
     return []func() resource.Resource{
-        NewCoveoIndexResource,
-        NewCoveoDocumentResource, // Ensure this is properly registered
+        func() resource.Resource { return NewCoveoIndexResource(p.client) },
+        func() resource.Resource { return NewCoveoDocumentResource(p.client) },
     }
 }
